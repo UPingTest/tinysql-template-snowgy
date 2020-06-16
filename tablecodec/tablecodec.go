@@ -72,6 +72,8 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
+	tableID = DecodeTableID(key)
+	handle, err = DecodeRowKey(key)
 	return
 }
 
@@ -95,7 +97,9 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
-	return tableID, indexID, indexValues, nil
+	tableID = DecodeTableID(key)
+	indexID, indexValues, err = DecodeIndexID(key)
+	return
 }
 
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
@@ -162,6 +166,10 @@ func hasRecordPrefixSep(key kv.Key) bool {
 	return key[0] == recordPrefixSep[0] && key[1] == recordPrefixSep[1]
 }
 
+func hasIndexPrefixSep(key kv.Key) bool {
+	return key[0] == indexPrefixSep[0] && key[1] == indexPrefixSep[1]
+}
+
 // DecodeMetaKey decodes the key and get the meta key and meta field.
 func DecodeMetaKey(ek kv.Key) (key []byte, field []byte, err error) {
 	var tp uint64
@@ -226,7 +234,9 @@ func DecodeTableID(key kv.Key) int64 {
 	}
 	key = key[len(tablePrefix):]
 	_, tableID, err := codec.DecodeInt(key)
-	// TODO: return error.
+	if err != nil {
+		return 0
+	}
 	terror.Log(errors.Trace(err))
 	return tableID
 }
@@ -238,6 +248,15 @@ func DecodeRowKey(key kv.Key) (int64, error) {
 	}
 	u := binary.BigEndian.Uint64(key[prefixLen:])
 	return codec.DecodeCmpUintToInt(u), nil
+}
+
+// DecodeIndexID decodes the key and gets the indexID
+func DecodeIndexID(key kv.Key) (index int64, left []byte, err error) {
+	if !hasTablePrefix(key) || !hasIndexPrefixSep(key[prefixLen-2:]) {
+		return 0, nil, errInvalidKey.GenWithStack("invalid key - %q", key)
+	}
+	left, index, err = codec.DecodeInt(key[prefixLen:])
+	return
 }
 
 // EncodeValue encodes a go value to bytes.
